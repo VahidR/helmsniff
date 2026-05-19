@@ -45,7 +45,7 @@ The binary is compiled to `bin/helmsniff`.
 ## Usage
 
 ```bash
-./bin/helmsniff --root <rendered_dir> --out <csv_path>
+./bin/helmsniff --root <rendered_dir> --out <output_path> [--format csv|json]
 ```
 
 **Flags:**
@@ -53,7 +53,8 @@ The binary is compiled to `bin/helmsniff`.
 | Flag | Description |
 |------|-------------|
 | `--root` | Path to directory containing rendered Kubernetes manifests |
-| `--out` | Path to output CSV file |
+| `--out` | Path to output file |
+| `--format` | Output format: `csv` (default) or `json` |
 
 ### Batch processing
 
@@ -61,6 +62,14 @@ Scan multiple charts in parallel using GNU `parallel`:
 
 ```bash
 parallel ./bin/helmsniff --root {} --out reports/{/}.csv ::: datasets/rendered/*/
+```
+
+### JSON output
+
+Generate a JSON report instead of CSV:
+
+```bash
+./bin/helmsniff --root datasets/rendered/mychart --out report.json --format json
 ```
 
 ## Makefile Targets
