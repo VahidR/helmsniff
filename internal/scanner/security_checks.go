@@ -5,22 +5,31 @@ import (
 )
 
 // ---------- helpers ----------
+
+// asMap safely type-asserts v to map[string]interface{}.
+// Returns nil if the assertion fails.
 func asMap(v interface{}) map[string]interface{} {
 	if m, ok := v.(map[string]interface{}); ok {
 		return m
 	}
 	return nil
 }
+// asSlice safely type-asserts v to []interface{}.
+// Returns nil if the assertion fails.
 func asSlice(v interface{}) []interface{} {
 	if s, ok := v.([]interface{}); ok {
 		return s
 	}
 	return nil
 }
+// str safely type-asserts v to string.
+// Returns an empty string if v is not a string.
 func str(v interface{}) string {
 	s, _ := v.(string)
 	return s
 }
+// boolVal safely type-asserts v to bool.
+// Returns false if v is not a bool.
 func boolVal(v interface{}) bool {
 	if b, ok := v.(bool); ok {
 		return b
@@ -28,10 +37,15 @@ func boolVal(v interface{}) bool {
 	return false
 }
 
+// hasAPIVersionAndKind returns true if the document contains non-empty
+// "apiVersion" and "kind" fields, indicating a valid Kubernetes resource.
 func hasAPIVersionAndKind(doc map[string]interface{}) bool {
 	return str(doc["apiVersion"]) != "" && str(doc["kind"]) != ""
 }
 
+// detectHelmManaged returns true if the document's metadata labels indicate
+// it is managed by Helm (either via "app.kubernetes.io/managed-by: Helm"
+// or the presence of a "helm.sh/chart" label).
 func detectHelmManaged(doc map[string]interface{}) bool {
 	meta := asMap(doc["metadata"])
 	if meta == nil {
@@ -50,6 +64,9 @@ func detectHelmManaged(doc map[string]interface{}) bool {
 	return false
 }
 
+// isWorkloadKind returns true if the given kind (case-insensitive) represents
+// a Kubernetes workload resource that contains a pod spec (e.g. Deployment,
+// StatefulSet, DaemonSet, Job, CronJob, ReplicaSet, ReplicationController, Pod).
 func isWorkloadKind(kind string) bool {
 	k := strings.ToLower(kind)
 	switch k {
@@ -63,6 +80,8 @@ func isWorkloadKind(kind string) bool {
 
 // ---------- rules ----------
 
+// countSecretsInDoc returns 1 if the document is a Kubernetes Secret that
+// contains at least one entry in "data" or "stringData", otherwise 0.
 func countSecretsInDoc(doc map[string]interface{}) int {
 	if strings.EqualFold(str(doc["kind"]), "Secret") {
 		m := asMap(doc["data"])
@@ -74,7 +93,9 @@ func countSecretsInDoc(doc map[string]interface{}) int {
 	return 0
 }
 
-// Raw-ish “http://” detector across common string fields (closer to Py’s grep)
+// hasInsecureHTTP recursively walks all keys and values in the document and
+// returns 1 if any string contains "http://" (case-insensitive), indicating
+// use of an insecure plaintext HTTP connection. Returns 0 otherwise.
 func hasInsecureHTTP(doc map[string]interface{}) int {
 	found := 0
 	var walk func(x interface{})
@@ -111,6 +132,9 @@ func hasInsecureHTTP(doc map[string]interface{}) int {
 	return found
 }
 
+// containersFromSpec collects all container definitions (both regular and init
+// containers) from a pod spec. It also descends into spec.template.spec for
+// workload resources like Deployments. Returns nil if spec is nil.
 func containersFromSpec(spec map[string]interface{}) []interface{} {
 	if spec == nil {
 		return nil
@@ -136,7 +160,9 @@ func containersFromSpec(spec map[string]interface{}) []interface{} {
 	return all
 }
 
-// Extracts the pod spec from a doc, if any.
+// podSpecFromDoc extracts the pod-level spec from a Kubernetes document.
+// For Pods it returns doc.spec directly; for workload kinds (Deployment, etc.)
+// it returns doc.spec.template.spec. Returns nil for non-workload documents.
 func podSpecFromDoc(doc map[string]interface{}) map[string]interface{} {
 	sp := asMap(doc["spec"])
 	if strings.EqualFold(str(doc["kind"]), "Pod") {
@@ -148,8 +174,9 @@ func podSpecFromDoc(doc map[string]interface{}) map[string]interface{} {
 	return nil
 }
 
-// Py’s behavior: flag only when pod-level secCtx absent AND all containers lack it.
-// Also: if spec == nil (non-workload), treat as N/A ⇒ 0
+// lackSecurityContext returns 1 if the pod spec has no pod-level securityContext
+// AND none of its containers define one. Returns 0 for non-workload documents
+// (spec == nil) or if at least one security context is present.
 func lackSecurityContext(spec map[string]interface{}) int {
 	if spec == nil {
 		return 0
@@ -170,8 +197,9 @@ func lackSecurityContext(spec map[string]interface{}) int {
 	return missingAll
 }
 
-// Py flags when any container lacks resources (limits/requests) entirely.
-// If spec == nil (non-workload), return 0.
+// lackResources returns 1 if any container in the pod spec lacks both resource
+// limits and requests entirely. Returns 0 for non-workload documents (spec == nil)
+// or if all containers have at least one of limits/requests defined.
 func lackResources(spec map[string]interface{}) int {
 	if spec == nil { return 0 }
 	containers := containersFromSpec(spec)
@@ -190,6 +218,9 @@ func lackResources(spec map[string]interface{}) int {
 	return anyMissing
 }
 
+// checkHostFlags inspects the pod spec for host namespace sharing flags.
+// Returns 1 for each of hostPID, hostIPC, and hostNetwork that is set to true.
+// All return 0 if spec is nil.
 func checkHostFlags(spec map[string]interface{}) (hostPID, hostIPC, hostNet int) {
 	if spec == nil {
 		return
@@ -206,6 +237,8 @@ func checkHostFlags(spec map[string]interface{}) (hostPID, hostIPC, hostNet int)
 	return
 }
 
+// checkDockerSock returns 1 if any volume in the pod spec mounts the Docker
+// socket path (/var/run/docker.sock) via a hostPath volume. Returns 0 otherwise.
 func checkDockerSock(spec map[string]interface{}) int {
 	if spec == nil {
 		return 0
@@ -220,6 +253,10 @@ func checkDockerSock(spec map[string]interface{}) int {
 	return 0
 }
 
+// checkCaps inspects all containers in the pod spec for dangerous security
+// settings. Returns 1 for each condition found: SYS_ADMIN capability added,
+// SYS_MODULE capability added, allowPrivilegeEscalation set to true, or
+// seccomp profile type set to "Unconfined". All return 0 if spec is nil.
 func checkCaps(spec map[string]interface{}) (capSysAdmin, capSysModule int, allowPrivi int, seccompUnconfined int) {
 	if spec == nil {
 		return
@@ -253,6 +290,9 @@ func checkCaps(spec map[string]interface{}) (capSysAdmin, capSysModule int, allo
 	return
 }
 
+// hasHostAliases returns 1 if the pod spec defines any hostAliases entries
+// (custom /etc/hosts mappings), which can be used for DNS spoofing. Returns 0
+// if spec is nil or no hostAliases are present.
 func hasHostAliases(spec map[string]interface{}) int {
 	if spec == nil {
 		return 0
@@ -263,6 +303,9 @@ func hasHostAliases(spec map[string]interface{}) int {
 	return 0
 }
 
+// lackRollingUpdate returns 1 if the document is a Deployment that either uses
+// the "Recreate" strategy or has no rollingUpdate configuration specified.
+// Returns 0 for non-Deployment kinds or properly configured rolling updates.
 func lackRollingUpdate(doc map[string]interface{}) int {
 	if strings.EqualFold(str(doc["kind"]), "Deployment") {
 		spec := asMap(doc["spec"])
@@ -278,9 +321,10 @@ func lackRollingUpdate(doc map[string]interface{}) int {
 	return 0
 }
 
+// lackNamespace returns 1 if the document's metadata does not specify a
+// namespace, which may indicate deployment to the default namespace.
+// Note: cluster-scoped kinds will also be flagged.
 func lackNamespace(doc map[string]interface{}) int {
-	// Keep simple/consistent with Py; cluster-scoped kinds may inflate counts, but this matches earlier data.
-	// TODO:‌ add this namespace is default or not.
 	meta := asMap(doc["metadata"])
 	ns := str(meta["namespace"])
 	if ns == "" {

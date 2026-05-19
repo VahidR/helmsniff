@@ -8,14 +8,16 @@ import (
 	"github.com/VahidR/helmsniff/internal/parser"
 )
 
-// helper
+// isYAML returns true if the file path has a .yaml or .yml extension (case-insensitive).
 func isYAML(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".yaml" || ext == ".yml"
 }
 
-// HasNetworkPolicy scans all YAML docs under a rendered chart dir once
-// to decide the chart-level NO_NETWORK_POLICY flag.
+// HasNetworkPolicy walks all YAML files under rootDir and returns true if any
+// document has kind "NetworkPolicy". This is a chart-level pre-scan used to
+// set the NoNetworkPolicy flag on every row produced from that chart.
+// Short-circuits on the first NetworkPolicy found for efficiency.
 func HasNetworkPolicy(rootDir string) bool {
 	hasNP := false
 	_ = filepath.WalkDir(rootDir, func(p string, d fs.DirEntry, err error) error {
@@ -40,9 +42,11 @@ func HasNetworkPolicy(rootDir string) bool {
 	return hasNP
 }
 
-// AnalyzeFile parses each YAML document in a multi-doc YAML file and returns one Row per doc.
-// hasNP is computed once per chart and applied to every row.
-// NOTE: signature takes hasNP and we reuse isYAML(p) in the caller (main.go)
+// AnalyzeFile parses a multi-document YAML file and runs all security checks
+// on each document, returning one Row per document. The hasNP parameter is a
+// pre-computed chart-level flag indicating whether a NetworkPolicy exists in
+// the chart (from HasNetworkPolicy). rootDir is recorded in each Row for CSV
+// output context. Returns an error only if YAML parsing fails entirely.
 func AnalyzeFile(path string, rootDir string, hasNP bool) ([]Row, error) {
 	docs, err := parser.LoadYAMLDocs(path)
 	if err != nil {

@@ -1,3 +1,6 @@
+// Package parser provides YAML loading utilities for multi-document Kubernetes
+// manifest files. It produces untyped map representations suitable for the
+// scanner's security analysis checks.
 package parser
 
 import (
@@ -7,7 +10,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadYAMLDocs reads all YAML documents from a file and returns them as a slice of generic maps.
+// LoadYAMLDocs reads a multi-document YAML file at the given path and returns
+// each non-empty document as a map[string]interface{}. Empty documents (e.g.
+// those produced by Helm template separators "---") are silently skipped.
+// Returns an error if the file cannot be opened or contains malformed YAML.
 func LoadYAMLDocs(path string) ([]map[string]interface{}, error) {
 	f, err := os.Open(path)
 	if err != nil {
