@@ -31,4 +31,5 @@ test:
 	$(GO) test -race ./...
 
 run: build
-	@echo "Usage: $(BIN_DIR)/$(BINARY) --root <rendered_dir> --out <csv_path>"
+	@echo "Usage: $(BIN_DIR)/$(BINARY) --root <rendered_dir|-> --out <path|-> [--format csv|json]"
+	@echo "  Pipe mode: helm template mychart | $(BIN_DIR)/$(BINARY) --root - --out - --format json"
