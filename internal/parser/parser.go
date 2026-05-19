@@ -21,7 +21,14 @@ func LoadYAMLDocs(path string) ([]map[string]interface{}, error) {
 	}
 	defer f.Close()
 
-	dec := yaml.NewDecoder(f)
+	return LoadYAMLDocsFromReader(f)
+}
+
+// LoadYAMLDocsFromReader reads multi-document YAML from an io.Reader and returns
+// each non-empty document as a map[string]interface{}. This supports reading
+// from stdin or any other stream source.
+func LoadYAMLDocsFromReader(r io.Reader) ([]map[string]interface{}, error) {
+	dec := yaml.NewDecoder(r)
 	var out []map[string]interface{}
 	for {
 		var node map[string]interface{}
