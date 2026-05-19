@@ -1,0 +1,25 @@
+# Output
+result.csv
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build/test artifacts
+*.test
+*.out
+coverage.html
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
