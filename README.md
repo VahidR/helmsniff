@@ -45,15 +45,15 @@ The binary is compiled to `bin/helmsniff`.
 ## Usage
 
 ```bash
-./bin/helmsniff --root <rendered_dir> --out <output_path> [--format csv|json]
+./bin/helmsniff --root <rendered_dir|-> --out <output_path|-> [--format csv|json]
 ```
 
 **Flags:**
 
 | Flag | Description |
 |------|-------------|
-| `--root` | Path to directory containing rendered Kubernetes manifests |
-| `--out` | Path to output file |
+| `--root` | Path to directory containing rendered Kubernetes manifests, or `-` to read from stdin |
+| `--out` | Path to output file, or `-` to write to stdout |
 | `--format` | Output format: `csv` (default) or `json` |
 
 ### Batch processing
@@ -70,6 +70,20 @@ Generate a JSON report instead of CSV:
 
 ```bash
 ./bin/helmsniff --root datasets/rendered/mychart --out report.json --format json
+```
+
+### Stdin pipe
+
+Pipe `helm template` output directly without writing intermediate files:
+
+```bash
+helm template mychart ./charts/mychart | ./bin/helmsniff --root - --out - --format json
+```
+
+Or save to a file:
+
+```bash
+helm template mychart ./charts/mychart | ./bin/helmsniff --root - --out report.csv
 ```
 
 ## Makefile Targets
