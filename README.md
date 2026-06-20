@@ -116,4 +116,6 @@ helmsniff/
 
 ## License
 
-See repository for license details.
+[MIT](LICENSE)
+
+
