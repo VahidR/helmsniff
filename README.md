@@ -1,33 +1,37 @@
 # helmsniff
 
-A Go CLI tool that scans rendered Kubernetes/Helm manifests and produces a CSV report of security misconfigurations.
+A Go CLI tool that scans rendered Kubernetes/Helm manifests and produces a CSV or JSON report of security misconfigurations.
 
 ## Security Checks
 
-Each YAML document is analyzed for the following:
+Every output row begins with two context columns, followed by one column per
+check. Check columns are binary integers (`1` = violation/detected, `0` = ok),
+while `K8S_STATUS` and `HELM_STATUS` are booleans (`true`/`false`).
 
-| Column | Description |
-|--------|-------------|
-| `WITHIN_MANIFEST_SECRET` | Secret data found in manifest |
-| `VALID_TAINT_SECRET` | Valid taint-based secret detected |
-| `SEC_CONT_OVER_PRIVIL` | SecurityContext with `privileged: true` |
-| `INSECURE_HTTP` | Insecure HTTP usage detected |
-| `NO_SECU_CONTEXT` | Missing securityContext |
-| `NO_DEFAULT_NSPACE` | Missing namespace (defaults to `default`) |
-| `NO_RESO` | Missing resource requests/limits |
-| `NO_ROLLING_UPDATE` | Deployment without rollingUpdate strategy |
-| `NO_NETWORK_POLICY` | Chart has no NetworkPolicy resource |
-| `TRUE_HOST_PID` | `hostPID: true` |
-| `TRUE_HOST_IPC` | `hostIPC: true` |
-| `DOCKERSOCK_PATH` | docker.sock mounted via hostPath |
-| `TRUE_HOST_NET` | `hostNetwork: true` |
-| `CAP_SYS_ADMIN` | `SYS_ADMIN` capability added |
-| `HOST_ALIAS` | hostAliases present |
-| `ALLOW_PRIVI` | `allowPrivilegeEscalation: true` |
-| `SECCOMP_UNCONFINED` | seccompProfile set to Unconfined |
-| `CAP_SYS_MODULE` | `SYS_MODULE` capability added |
-| `K8S_STATUS` | Kubernetes status metadata present |
-| `HELM_STATUS` | Helm status metadata present |
+| Column | Type | Description |
+|--------|------|-------------|
+| `DIR` | string | Parent directory (chart) path, or input label for stdin mode |
+| `YAML_FULL_PATH` | string | Full path to the analyzed YAML file, or input label for stdin mode |
+| `WITHIN_MANIFEST_SECRET` | int | Document is a `Secret` with non-empty `data`/`stringData` |
+| `VALID_TAINT_SECRET` | int | Reserved for taint-based secret detection (always `0`; not yet implemented) |
+| `SEC_CONT_OVER_PRIVIL` | int | Container running in privileged mode |
+| `INSECURE_HTTP` | int | A plaintext `http://` URL found anywhere in the document |
+| `NO_SECU_CONTEXT` | int | No `securityContext` at pod level or on any container |
+| `NO_DEFAULT_NSPACE` | int | No namespace specified in resource metadata |
+| `NO_RESO` | int | A container is missing both resource requests and limits |
+| `NO_ROLLING_UPDATE` | int | Deployment uses `Recreate` or lacks a `rollingUpdate` strategy |
+| `NO_NETWORK_POLICY` | int | Chart contains no `NetworkPolicy` resource |
+| `TRUE_HOST_PID` | int | `hostPID: true` |
+| `TRUE_HOST_IPC` | int | `hostIPC: true` |
+| `DOCKERSOCK_PATH` | int | `/var/run/docker.sock` mounted via `hostPath` |
+| `TRUE_HOST_NET` | int | `hostNetwork: true` |
+| `CAP_SYS_ADMIN` | int | `SYS_ADMIN` capability added to a container |
+| `HOST_ALIAS` | int | `hostAliases` present in the pod spec |
+| `ALLOW_PRIVI` | int | `allowPrivilegeEscalation: true` |
+| `SECCOMP_UNCONFINED` | int | `seccompProfile.type` set to `Unconfined` |
+| `CAP_SYS_MODULE` | int | `SYS_MODULE` capability added to a container |
+| `K8S_STATUS` | bool | Document is a valid Kubernetes resource (has `apiVersion` and `kind`) |
+| `HELM_STATUS` | bool | Document is managed by Helm (`managed-by: Helm` label or `helm.sh/chart` label) |
 
 ## Prerequisites
 
@@ -101,17 +105,22 @@ helm template mychart ./charts/mychart | ./bin/helmsniff --root - --out report.c
 
 ```
 helmsniff/
-├── cmd/main.go              # CLI entry point
+├── cmd/main.go                      # CLI entry point (flags, walking, CSV/JSON output)
 ├── internal/
-│   ├── config/constants.go  # CSV header definition
-│   ├── parser/parser.go     # YAML document loader
+│   ├── config/constants.go          # CSV header definition
+│   ├── parser/
+│   │   ├── parser.go                # YAML document loader (file & reader)
+│   │   └── parser_test.go
 │   └── scanner/
-│       ├── scanner.go       # File walking & analysis orchestration
-│       ├── security_checks.go # Individual check implementations
-│       └── row.go           # Row data structure
-├── test-datasets/           # Sample Helm charts for testing
+│       ├── scanner.go               # File walking & analysis orchestration
+│       ├── security_checks.go       # Individual check implementations
+│       ├── row.go                   # Row data structure
+│       ├── scanner_test.go
+│       └── security_checks_test.go
+├── ARCHITECTURE.md                  # Design notes & detailed check reference
 ├── Makefile
-└── go.mod
+├── go.mod
+└── go.sum
 ```
 
 ## License
