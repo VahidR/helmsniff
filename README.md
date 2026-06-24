@@ -2,6 +2,8 @@
 
 A Go CLI tool that scans rendered Kubernetes/Helm manifests and produces a CSV or JSON report of security misconfigurations.
 
+> 📖 **New to helmsniff? Start here:** [**Scanning Helm Charts at Scale with helmsniff**](https://vahid-r.com/posts/helmsniff-tutorial/) — a full tutorial that walks through real scans, explains every check, and shows how to analyze thousands of charts. It is the fastest way to get a complete grasp of the tool.
+
 ## Security Checks
 
 Every output row begins with two context columns, followed by one column per
