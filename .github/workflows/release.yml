@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            artifact: helmsniff-linux-amd64.tar.gz
+          - os: windows-latest
+            goos: windows
+            artifact: helmsniff-windows-amd64.zip
+          - os: macos-latest
+            goos: darwin
+            artifact: helmsniff-macos-arm64.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      # --- Linux ---
+      - name: Build and package Linux
+        if: matrix.goos == 'linux'
+        run: |
+          go build -ldflags '-s -w' -o helmsniff ./cmd
+          tar czf helmsniff-linux-amd64.tar.gz helmsniff README.md LICENSE
+
+      # --- Windows ---
+      - name: Build and package Windows
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          go build -ldflags '-s -w' -o helmsniff.exe ./cmd
+          Compress-Archive -Path helmsniff.exe, README.md, LICENSE -DestinationPath helmsniff-windows-amd64.zip
+
+      # --- macOS ---
+      - name: Build and package macOS
+        if: matrix.goos == 'darwin'
+        run: |
+          go build -ldflags '-s -w' -o helmsniff ./cmd
+          zip -r helmsniff-macos-arm64.zip helmsniff README.md LICENSE
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            helmsniff-linux-amd64.tar.gz/*.tar.gz
+            helmsniff-windows-amd64.zip/*.zip
+            helmsniff-macos-arm64.zip/*.zip

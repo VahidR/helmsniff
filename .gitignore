@@ -3,6 +3,7 @@ result.csv
 
 # Binaries
 bin/
+dist/
 *.exe
 *.dll
 *.so
@@ -23,3 +24,8 @@ coverage.html
 # OS files
 .DS_Store
 Thumbs.db
+
+
+# .github — keep workflows 
+.github/*
+!.github/workflows/

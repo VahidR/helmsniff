@@ -35,6 +35,24 @@ while `K8S_STATUS` and `HELM_STATUS` are booleans (`true`/`false`).
 | `K8S_STATUS` | bool | Document is a valid Kubernetes resource (has `apiVersion` and `kind`) |
 | `HELM_STATUS` | bool | Document is managed by Helm (`managed-by: Helm` label or `helm.sh/chart` label) |
 
+## Download
+
+Pre-built binaries for Linux, Windows, and macOS are published on the
+[**Releases**](https://github.com/VahidR/helmsniff/releases) page.
+
+```bash
+# Linux (amd64)
+curl -L https://github.com/VahidR/helmsniff/releases/latest/download/helmsniff-linux-amd64.tar.gz | tar xz
+./helmsniff --root <rendered_dir|-> --out <output_path|->
+
+# macOS (Apple Silicon / arm64)
+curl -L https://github.com/VahidR/helmsniff/releases/latest/download/helmsniff-macos-arm64.zip -o helmsniff.zip
+unzip helmsniff.zip
+```
+
+On Windows, download `helmsniff-windows-amd64.zip` from the Releases page and
+extract `helmsniff.exe`.
+
 ## Prerequisites
 
 - Go 1.22+
@@ -123,6 +141,18 @@ helmsniff/
 ├── Makefile
 ├── go.mod
 └── go.sum
+```
+
+## Releasing
+
+Releases are automated via GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)). Pushing a
+semver tag builds the binary for Linux, Windows, and macOS and publishes a
+GitHub Release with archives and auto-generated release notes:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## License
