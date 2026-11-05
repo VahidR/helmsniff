@@ -14,6 +14,7 @@ func asMap(v interface{}) map[string]interface{} {
 	}
 	return nil
 }
+
 // asSlice safely type-asserts v to []interface{}.
 // Returns nil if the assertion fails.
 func asSlice(v interface{}) []interface{} {
@@ -22,12 +23,14 @@ func asSlice(v interface{}) []interface{} {
 	}
 	return nil
 }
+
 // str safely type-asserts v to string.
 // Returns an empty string if v is not a string.
 func str(v interface{}) string {
 	s, _ := v.(string)
 	return s
 }
+
 // boolVal safely type-asserts v to bool.
 // Returns false if v is not a bool.
 func boolVal(v interface{}) bool {
@@ -162,11 +165,16 @@ func containersFromSpec(spec map[string]interface{}) []interface{} {
 
 // podSpecFromDoc extracts the pod-level spec from a Kubernetes document.
 // For Pods it returns doc.spec directly; for workload kinds (Deployment, etc.)
-// it returns doc.spec.template.spec. Returns nil for non-workload documents.
+// it returns doc.spec.template.spec; for CronJobs it returns
+// doc.spec.jobTemplate.spec.template.spec. Returns nil for non-workload documents.
 func podSpecFromDoc(doc map[string]interface{}) map[string]interface{} {
 	sp := asMap(doc["spec"])
 	if strings.EqualFold(str(doc["kind"]), "Pod") {
 		return sp
+	}
+	// CronJob wraps the pod template one level deeper: spec.jobTemplate.spec.template.spec
+	if jt := asMap(sp["jobTemplate"]); jt != nil {
+		sp = asMap(jt["spec"])
 	}
 	if tpl := asMap(sp["template"]); tpl != nil {
 		return asMap(tpl["spec"])
@@ -201,9 +209,13 @@ func lackSecurityContext(spec map[string]interface{}) int {
 // limits and requests entirely. Returns 0 for non-workload documents (spec == nil)
 // or if all containers have at least one of limits/requests defined.
 func lackResources(spec map[string]interface{}) int {
-	if spec == nil { return 0 }
+	if spec == nil {
+		return 0
+	}
 	containers := containersFromSpec(spec)
-	if len(containers) == 0 { return 0 }
+	if len(containers) == 0 {
+		return 0
+	}
 
 	anyMissing := 0
 	for _, c := range containers {
@@ -288,6 +300,22 @@ func checkCaps(spec map[string]interface{}) (capSysAdmin, capSysModule int, allo
 		}
 	}
 	return
+}
+
+// checkPrivileged returns 1 if any container in the pod spec sets
+// securityContext.privileged to true, which grants the container full access
+// to the host kernel. Returns 0 if spec is nil or no container is privileged.
+func checkPrivileged(spec map[string]interface{}) int {
+	if spec == nil {
+		return 0
+	}
+	for _, c := range containersFromSpec(spec) {
+		sc := asMap(asMap(c)["securityContext"])
+		if boolVal(sc["privileged"]) {
+			return 1
+		}
+	}
+	return 0
 }
 
 // hasHostAliases returns 1 if the pod spec defines any hostAliases entries

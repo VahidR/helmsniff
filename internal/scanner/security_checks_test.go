@@ -702,6 +702,52 @@ func TestPodSpecFromDoc(t *testing.T) {
 			true,
 			"",
 		},
+		{
+			"CronJob returns jobTemplate.spec.template.spec",
+			map[string]interface{}{
+				"kind": "CronJob",
+				"spec": map[string]interface{}{
+					"schedule": "0 2 * * *",
+					"jobTemplate": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"hostPID": true,
+								},
+							},
+						},
+					},
+				},
+			},
+			false,
+			"hostPID",
+		},
+		{
+			"CronJob with jobTemplate but no template",
+			map[string]interface{}{
+				"kind": "CronJob",
+				"spec": map[string]interface{}{
+					"jobTemplate": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"backoffLimit": 3,
+						},
+					},
+				},
+			},
+			true,
+			"",
+		},
+		{
+			"CronJob with non-map jobTemplate",
+			map[string]interface{}{
+				"kind": "CronJob",
+				"spec": map[string]interface{}{
+					"jobTemplate": "bad",
+				},
+			},
+			true,
+			"",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1303,6 +1349,101 @@ func TestCheckCaps(t *testing.T) {
 			}
 			if seccomp != tc.wantSeccompUnconf {
 				t.Errorf("seccompUnconfined = %d, want %d", seccomp, tc.wantSeccompUnconf)
+			}
+		})
+	}
+}
+
+// ---------- checkPrivileged ----------
+
+func TestCheckPrivileged(t *testing.T) {
+	tests := []struct {
+		name string
+		spec map[string]interface{}
+		want int
+	}{
+		{
+			"nil spec",
+			nil,
+			0,
+		},
+		{
+			"no containers",
+			map[string]interface{}{},
+			0,
+		},
+		{
+			"container without securityContext",
+			map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{"name": "app"},
+				},
+			},
+			0,
+		},
+		{
+			"privileged false",
+			mkSpecWithSC(map[string]interface{}{"privileged": false}),
+			0,
+		},
+		{
+			"privileged true",
+			mkSpecWithSC(map[string]interface{}{"privileged": true}),
+			1,
+		},
+		{
+			"privileged as string is ignored",
+			mkSpecWithSC(map[string]interface{}{"privileged": "true"}),
+			0,
+		},
+		{
+			"privileged initContainer",
+			map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{"name": "app"},
+				},
+				"initContainers": []interface{}{
+					map[string]interface{}{
+						"name": "init",
+						"securityContext": map[string]interface{}{
+							"privileged": true,
+						},
+					},
+				},
+			},
+			1,
+		},
+		{
+			"one of many containers privileged",
+			map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{
+						"name":            "a",
+						"securityContext": map[string]interface{}{"privileged": false},
+					},
+					map[string]interface{}{
+						"name":            "b",
+						"securityContext": map[string]interface{}{"privileged": true},
+					},
+				},
+			},
+			1,
+		},
+		{
+			"pod-level securityContext.privileged is not a container flag",
+			map[string]interface{}{
+				"securityContext": map[string]interface{}{"privileged": true},
+				"containers": []interface{}{
+					map[string]interface{}{"name": "app"},
+				},
+			},
+			0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := checkPrivileged(tc.spec); got != tc.want {
+				t.Errorf("checkPrivileged() = %d, want %d", got, tc.want)
 			}
 		})
 	}

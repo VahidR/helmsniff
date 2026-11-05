@@ -74,6 +74,7 @@ func AnalyzeFile(path string, rootDir string, hasNP bool) ([]Row, error) {
 			row.TrueHostIPC,
 			row.TrueHostNet = checkHostFlags(ps)
 		row.DockerSockPath = checkDockerSock(ps)
+		row.SecContOverPrivil = checkPrivileged(ps)
 		row.CapSysAdmin,
 			row.CapSysModule,
 			row.AllowPrivi,
@@ -132,6 +133,7 @@ func AnalyzeReader(r io.Reader, label string) ([]Row, error) {
 			row.TrueHostIPC,
 			row.TrueHostNet = checkHostFlags(ps)
 		row.DockerSockPath = checkDockerSock(ps)
+		row.SecContOverPrivil = checkPrivileged(ps)
 		row.CapSysAdmin,
 			row.CapSysModule,
 			row.AllowPrivi,

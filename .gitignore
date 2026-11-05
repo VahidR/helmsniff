@@ -8,6 +8,8 @@ dist/
 *.dll
 *.so
 *.dylib
+*.iml
+
 
 # Go build/test artifacts
 *.test

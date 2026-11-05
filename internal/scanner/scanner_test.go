@@ -225,6 +225,7 @@ spec:
         - name: ENDPOINT
           value: "http://insecure-api.example.com"
         securityContext:
+          privileged: true
           allowPrivilegeEscalation: true
           capabilities:
             add:
@@ -259,6 +260,7 @@ spec:
 	assertEqual(t, "CapSysModule", r.CapSysModule, 1)
 	assertEqual(t, "SeccompUnconfined", r.SeccompUnconfined, 1)
 	assertEqual(t, "DockerSockPath", r.DockerSockPath, 1)
+	assertEqual(t, "SecContOverPrivil", r.SecContOverPrivil, 1)
 	assertEqual(t, "NoNetworkPolicy", r.NoNetworkPolicy, 1)
 	assertEqual(t, "NoRollingUpdate", r.NoRollingUpdate, 1)
 	assertEqual(t, "NoDefaultNSpace", r.NoDefaultNSpace, 1)
@@ -615,6 +617,63 @@ spec:
 
 	r := rows[0]
 	assertEqual(t, "K8sStatus", boolToInt(r.K8sStatus), 1)
+	// Pod-level checks must reach spec.jobTemplate.spec.template.spec:
+	// the container has resources and a securityContext, so both are clean.
+	assertEqual(t, "NoReso", r.NoReso, 0)
+	assertEqual(t, "NoSecuContext", r.NoSecuContext, 0)
+	assertEqual(t, "SecContOverPrivil", r.SecContOverPrivil, 0)
+}
+
+// TestAnalyzeFile_CronJobViolations verifies that pod-level violations inside a
+// CronJob's nested jobTemplate are detected (regression: the nested pod spec
+// was previously never reached, so every check reported 0).
+func TestAnalyzeFile_CronJobViolations(t *testing.T) {
+	dir := t.TempDir()
+	content := `apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: risky-cron
+  namespace: ops
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostPID: true
+          hostNetwork: true
+          containers:
+          - name: job
+            image: job:latest
+            securityContext:
+              privileged: true
+              capabilities:
+                add:
+                - SYS_ADMIN
+          volumes:
+          - name: docker
+            hostPath:
+              path: /var/run/docker.sock
+`
+	writeFile(t, dir, "cron.yaml", content)
+	path := filepath.Join(dir, "cron.yaml")
+
+	rows, err := AnalyzeFile(path, dir, false)
+	if err != nil {
+		t.Fatalf("AnalyzeFile() error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+
+	r := rows[0]
+	assertEqual(t, "TrueHostPID", r.TrueHostPID, 1)
+	assertEqual(t, "TrueHostNet", r.TrueHostNet, 1)
+	assertEqual(t, "SecContOverPrivil", r.SecContOverPrivil, 1)
+	assertEqual(t, "CapSysAdmin", r.CapSysAdmin, 1)
+	assertEqual(t, "DockerSockPath", r.DockerSockPath, 1)
+	assertEqual(t, "NoReso", r.NoReso, 1)
+	assertEqual(t, "NoSecuContext", r.NoSecuContext, 0)
 }
 
 func TestAnalyzeFile_InitContainers(t *testing.T) {
@@ -856,6 +915,7 @@ spec:
   - name: evil
     image: evil:latest
     securityContext:
+      privileged: true
       allowPrivilegeEscalation: true
       capabilities:
         add:
@@ -876,6 +936,7 @@ spec:
 	assertEqual(t, "AllowPrivi", r.AllowPrivi, 1)
 	assertEqual(t, "CapSysAdmin", r.CapSysAdmin, 1)
 	assertEqual(t, "DockerSockPath", r.DockerSockPath, 1)
+	assertEqual(t, "SecContOverPrivil", r.SecContOverPrivil, 1)
 	assertEqual(t, "NoReso", r.NoReso, 1)
 	assertEqual(t, "NoDefaultNSpace", r.NoDefaultNSpace, 1)
 }
